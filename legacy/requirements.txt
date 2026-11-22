@@ -1,0 +1,5 @@
+pysnmp
+pandas
+openpyxl
+python-dotenv
+json

@@ -1,0 +1,2 @@
+hostname,ip,vendor,device_type
+OLT-DEMO-01,192.0.2.10,HUAWEI,OLT_HUAWEI_MA5800

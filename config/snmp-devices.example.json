@@ -1,0 +1,15 @@
+{
+  "devices": [
+    {
+      "id": "GPON-LAB-01",
+      "vendor": "HUAWEI",
+      "model": "MA5800-X15",
+      "host": "192.0.2.10",
+      "port": 161,
+      "interfaces": [
+        {"ifindex": 1001, "name": "0/8/0", "capacity_bps": 10000000000},
+        {"ifindex": 1002, "name": "0/9/0", "capacity_bps": 10000000000}
+      ]
+    }
+  ]
+}
