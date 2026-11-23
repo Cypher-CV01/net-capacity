@@ -1,97 +1,100 @@
-# NetCapacity · MVP 0.1
+# Infraestrutura (IaC) — NetCapacity na AWS
 
-Plataforma demonstrativa de monitoramento de capacidade de uplinks GPON/HFC. Reaproveita **sem alterar** os scripts do Capacity Monitor original em `legacy/` e adiciona microserviços Docker: React, FastAPI, PostgreSQL, RabbitMQ, collector simulado e processor.
+Responsável: **Pessoa B** · Ferramenta: **Terraform** · Ambiente: **AWS Academy Learner Lab (us-east-1)**
 
-## Executar no Windows / VS Code
+## O que o Terraform cria
 
-Pré-requisitos: Docker Desktop com Compose, Git e VS Code.
+| Arquivo | Recursos |
+|---|---|
+| `vpc.tf` | VPC 10.0.0.0/16, 2 subnets públicas + 2 privadas (2 AZs), Internet Gateway, rotas |
+| `security.tf` | SG da EC2 (80 aberto; 22 e 3000 só do seu IP) e SG do RDS (5432 só a partir da EC2) |
+| `rds.tf` | Amazon RDS PostgreSQL 16 `db.t3.micro` nas subnets privadas (Multi-AZ opcional) |
+| `ec2.tf` | EC2 Amazon Linux 2023 `t3.large` + Elastic IP; `user_data` instala Docker, clona o repo, cria as tabelas no RDS e sobe o `deploy/docker-compose.aws.yml` |
+| `lambda.tf` | Lambda `relatorio-capacidade` + regra EventBridge + tópico SNS com assinatura por e-mail |
+| `outputs.tf` | URLs da aplicação, Grafana, SSH e endpoint do RDS |
 
-```powershell
-Copy-Item .env.example .env
-# Edite .env e altere as senhas locais; mantenha DATABASE_URL e AMQP_URL consistentes.
-docker compose up -d --build
-docker compose ps
-```
+Restrições do Learner Lab já tratadas: não cria IAM (usa `LabRole` e `LabInstanceProfile`), usa a key pair `vockey`, não usa NAT Gateway, usa Elastic IP porque a EC2 para ao fim de cada sessão.
 
-- Interface: http://localhost:8080
-- API: http://localhost:8000/docs
-- Health: http://localhost:8000/health
-- RabbitMQ Management: http://localhost:15672 (usuário e senha do `.env`)
-
-Na primeira inicialização, aguarde os healthchecks e ~20 segundos pelas primeiras amostras. O frontend atualiza a cada 10 segundos.
+## Pré-requisitos (Windows)
 
 ```powershell
-docker compose logs -f collector processor api
-docker compose down
-# Atenção: o comando abaixo apaga o banco local do MVP:
-# docker compose down -v
+winget install Hashicorp.Terraform
+winget install Amazon.AWSCLI
+# feche e reabra o terminal
+terraform -version
+aws --version
 ```
 
-## Dados simulados e SNMP real
+## Passo a passo
 
-- **Simulado:** padrão e executável no Compose. Gera amostras sintéticas de 8 dispositivos e 16 interfaces, variando utilização e disparando alertas a partir de 80%.
-- **SNMP real:** os três scripts originais foram preservados em `legacy/`: `capacity_monitor.py` (descoberta), `capacity_sampler.py` (amostras), `capacity_analyzer.py` (relatório). O código usa SNMPv2c, arquivos CSV e inventário; requer acesso autorizado à rede de gestão e revisão de configuração.
-- **Ponte SNMP:** `services/import_legacy.py` converte snapshots de contadores do CSV legado em taxas bps e publica no RabbitMQ. Ela é executada separadamente em uma máquina com acesso autorizado e requer `AMQP_URL` acessível. O adaptador não faz polling, não suporta stream contínuo e não foi validado com equipamentos reais. Alterar `COLLECTION_MODE=snmp` no Docker **não** ativa coleta real: o collector encerra com mensagem explícita.
+1. **Inicie o Learner Lab**, clique em *Start Lab* e espere a bolinha ficar verde.
+2. **Credenciais.** Em *AWS Details → AWS CLI → Show*, copie o bloco inteiro para `%UserProfile%\.aws\credentials`. Repita a cada nova sessão.
+   - Baixe também o `labsuser.pem` (*Download PEM*).
 
-Para testar o legado separadamente no Windows, crie `legacy/config/devices.csv` baseado no exemplo, configure `.env` local com credenciais read-only, instale `legacy/requirements.txt` em um ambiente virtual Python compatível e execute os comandos de ajuda/uso indicados pelos scripts. **Nunca envie IPs internos, comunidades, senhas, inventário real ou logs sensíveis ao GitHub.**
+   ```powershell
+   aws sts get-caller-identity   # deve mostrar a conta e a role voclabs
+   ```
 
-### Importar amostras reais já coletadas (etapa experimental)
+3. **Variáveis:**
 
-O arquivo legado `output/samples.csv` contém **contadores de octetos**, não taxas. O adaptador exige duas amostras por interface, calcula `bps = delta_octets * 8 / delta_segundos`, descarta deltas inválidos e não transmite IPs/aliases. Para executar, use Python no Windows com `pika` instalado e `AMQP_URL` apontando para um RabbitMQ autorizado. O RabbitMQ deste Compose só expõe o painel de gestão na porta 15672; para importar a partir do host, configure uma porta AMQP local **restrita a 127.0.0.1** (`127.0.0.1:5672:5672`) no serviço `rabbitmq` e use `amqp://usuario:senha@localhost:5672/%2F`. Não publique essa porta na Internet.
+   ```powershell
+   cd infra\terraform
+   Copy-Item terraform.tfvars.example terraform.tfvars
+   notepad terraform.tfvars    # my_ip_cidr, db_password, alert_email, repo_url
+   ```
 
-```powershell
-$env:AMQP_URL = 'amqp://netcapacity:SUA_SENHA@localhost:5672/%2F'
-python services/import_legacy.py C:\caminho\samples.csv C:\caminho\uplinks.json
-```
+4. **Criar a infra** (o RDS leva de 5 a 10 minutos):
 
-A importação reenvia todas as amostras calculáveis a cada execução e pode gerar duplicatas. Use apenas em laboratório até haver controle de checkpoint e idempotência.
+   ```powershell
+   terraform init
+   terraform fmt
+   terraform validate
+   terraform plan -out plano.tfplan
+   terraform apply plano.tfplan
+   terraform output
+   ```
 
-## O que está funcionando no MVP
+5. **Confirmar a assinatura do SNS** no e-mail ("AWS Notification - Subscription Confirmation").
+6. **Validar:**
+   - Abrir o `app_url`, cerca de 5 minutos depois do apply, porque o build dos containers demora.
+   - Testar a API:
 
-- React/TypeScript com cards, filtros GPON/HFC, tabela de interfaces e indicação de 80%.
-- FastAPI com `/health`, `/api/summary`, `/api/interfaces`, `/api/alerts` e Swagger.
-- RabbitMQ durável, processador de eventos e banco PostgreSQL.
-- Dados sintéticos marcados como `simulated`.
-- CI com sintaxe Python, testes unitários, validação Compose e build.
-- Preservação integral dos scripts `.py` e requirements originais.
+     ```powershell
+     Invoke-RestMethod "$(terraform output -raw health_url)"
+     ```
 
-## Pendências técnicas
+   - Testar a Lambda na hora, sem esperar o agendamento:
 
-1. Testar a ponte CSV SNMP com dados anonimizados e RabbitMQ acessível, automatizar importação incremental e suportar contadores com discontinuidades.
-2. Validar nomes/índices IF-MIB e reset de contadores 64-bit; a ponte CSV calcula taxa entre duas amostras, enquanto o MVP simula bps diretamente.
-3. Modelar pares redundantes, LAG e capacidade N-1; não somar capacidades sem verificar a topologia.
-4. Adicionar testes de integração, segurança/autenticação, retenção e agregação histórica.
-5. Acrescentar Grafana/Prometheus/Loki, Terraform, CD e documentação de alta disponibilidade.
-6. Parametrizar o limiar na API (o processador usa `ALERT_THRESHOLD_PERCENT`, mas o resumo usa 80 fixo neste MVP).
+     ```powershell
+     aws lambda invoke --function-name netcapacity-relatorio-capacidade saida.json; Get-Content saida.json
+     ```
 
-## Estrutura
+   - Se algo falhar na EC2, ver o log:
 
-```text
-legacy/                 Scripts Python originais (sem dados corporativos)
-services/               API, collector simulado, processor, adaptador futuro
-frontend/               React + Vite + Nginx
- database/              PostgreSQL schema
- docs/                  Arquitetura e RACI
- tests/                 Testes iniciais
- .github/workflows/      CI
- docker-compose.yml      Ambiente de desenvolvimento
-```
+     ```powershell
+     ssh -i labsuser.pem ec2-user@<IP>
+     sudo tail -100 /var/log/netcapacity-bootstrap.log
+     cd /opt/netcapacity; docker compose -f deploy/docker-compose.aws.yml ps
+     ```
 
-## GitHub
+7. **Fim da sessão:** pode só encerrar o lab, porque EC2 e RDS param sozinhos e voltam na próxima sessão com o mesmo IP. Para zerar tudo e economizar orçamento, use `terraform destroy`.
 
-Crie um repositório privado chamado `NetCapacity` na sua conta (nenhum repositório foi criado automaticamente):
+## Fases (para não depender da Pessoa A)
 
-```powershell
-git init
-git add .
-git commit -m "feat: bootstrap NetCapacity MVP"
-git branch -M main
-git remote add origin https://github.com/SEU_USUARIO/NetCapacity.git
-git push -u origin main
-```
+- **Fase 1** (`repo_url = ""`): sobe VPC, RDS, EC2 com Docker, Lambda e SNS. A Lambda vai falhar ao chamar a API, o que é esperado porque ainda não há aplicação.
+- **Fase 2**: com o repositório público no GitHub contendo `deploy/docker-compose.aws.yml`, preencha `repo_url` e rode `terraform apply`. A EC2 é recriada e sobe a aplicação sozinha. O IP não muda, porque o Elastic IP é reaproveitado.
 
-Antes de publicar, revise o conteúdo de `legacy/` e substitua qualquer referência operacional sensível remanescente. Não coloque o ZIP original nem arquivos `.env` no repositório.
+## Alta disponibilidade (para o README principal e os slides)
 
-## v0.2 — SNMP via VPN no Windows + LAG
+O que a demo já tem:
+- Subnets em 2 AZs.
+- RDS gerenciado, com backup automático.
+- Fila durável no RabbitMQ: se o processor cair, as mensagens esperam na fila.
+- `restart: unless-stopped` nos containers.
+- Lambda e SNS são serviços gerenciados, que já são HA.
 
-See [`docs/v02-windows-snmp.md`](docs/v02-windows-snmp.md). The original v0.1 stack and `legacy/` scripts remain intact. Frontend uses host port **8081**, as validated on Windows. The Docker RabbitMQ service additionally binds AMQP only to `127.0.0.1:5672` for the optional host collector. Database migration `database/002_lag.sql` must be applied to existing volumes before using `/api/lags`.
+Evolução para produção:
+- Application Load Balancer + Auto Scaling Group (mínimo 2 EC2, uma por AZ) para o frontend e a API.
+- `db_multi_az = true` no RDS.
+- Amazon MQ (RabbitMQ gerenciado, em cluster) no lugar do container.
+- Ou migrar os containers para ECS/EKS.
