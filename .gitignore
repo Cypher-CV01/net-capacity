@@ -16,3 +16,13 @@ node_modules/
 dist/
 config/snmp-devices.json
 *.local.json
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+**/build/
+crash.log
+*.pem
