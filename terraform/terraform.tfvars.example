@@ -1,8 +1,0 @@
-# Copie para terraform.tfvars (NÃO commitar) e preencha.
-my_ip_cidr  = "200.200.200.200/32"     # seu IP: https://checkip.amazonaws.com
-db_password = "TroqueEstaSenha123"     # só letras e números, 12+ caracteres
-alert_email = "seu.email@exemplo.com"
-
-# Deixe vazio até o repositório existir no GitHub (público):
-repo_url = ""
-# repo_url = "https://github.com/SEU_USUARIO/NetCapacity.git"
