@@ -26,3 +26,5 @@ config/snmp-devices.json
 **/build/
 crash.log
 *.pem
+*.plan
+*.tfplan
