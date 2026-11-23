@@ -1,0 +1,76 @@
+# Compose de produção/demo na AWS (EC2). Diferenças para o docker-compose.yml local:
+#  - SEM o serviço "db": o banco é o Amazon RDS (DATABASE_URL no .env)
+#  - frontend publicado na porta 80 (Nginx faz proxy de /api para a API)
+#  - API e RabbitMQ não expostos para a internet
+# Uso (na EC2): docker compose -f deploy/docker-compose.aws.yml --env-file .env up -d --build
+name: netcapacity
+
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "10m", max-file: "3"}
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    ports:
+      - "127.0.0.1:15672:15672"   # painel: acesse via túnel SSH
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+    logging: *logging
+
+  api:
+    build: ../services
+    command: uvicorn api:app --host 0.0.0.0 --port 8000
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      ALERT_THRESHOLD_PERCENT: ${ALERT_THRESHOLD_PERCENT:-80}
+    restart: unless-stopped
+    logging: *logging
+
+  collector:
+    build: ../services
+    command: python collector.py
+    environment:
+      AMQP_URL: ${AMQP_URL}
+      COLLECTION_MODE: ${COLLECTION_MODE:-simulated}
+      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-20}
+      SIMULATED_DEVICES: ${SIMULATED_DEVICES:-40}
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
+    logging: *logging
+
+  processor:
+    build: ../services
+    command: python processor.py
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      AMQP_URL: ${AMQP_URL}
+      ALERT_THRESHOLD_PERCENT: ${ALERT_THRESHOLD_PERCENT:-80}
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
+    logging: *logging
+
+  frontend:
+    build: ../frontend
+    depends_on: [api]
+    ports:
+      - "80:80"
+    restart: unless-stopped
+    logging: *logging
+
+volumes:
+  rabbitmq-data:
+
+# A Pessoa C conecta a stack de observabilidade (Grafana/Prometheus/Loki)
+# na rede "netcapacity_default" criada por este compose.
