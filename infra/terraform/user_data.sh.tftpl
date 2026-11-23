@@ -1,0 +1,53 @@
+#!/bin/bash
+# Executado UMA vez, na criação da EC2. Log: /var/log/netcapacity-bootstrap.log
+exec > >(tee -a /var/log/netcapacity-bootstrap.log) 2>&1
+set -euxo pipefail
+
+# 1) Docker + Compose plugin + Git
+dnf install -y docker git
+systemctl enable --now docker
+usermod -aG docker ec2-user
+
+mkdir -p /usr/local/lib/docker/cli-plugins
+curl -fsSL "https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64" \
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+docker compose version
+
+REPO_URL="${repo_url}"
+if [ -z "$REPO_URL" ]; then
+  echo "repo_url vazio: EC2 pronta com Docker, aplicacao nao implantada."
+  exit 0
+fi
+
+# 2) Código da aplicação
+APP_DIR=/opt/netcapacity
+git clone --branch "${repo_branch}" --depth 1 "$REPO_URL" "$APP_DIR"
+cd "$APP_DIR"
+
+# 3) Variáveis de ambiente (arquivo só na EC2, nunca no Git)
+DATABASE_URL="postgresql://${db_user}:${db_password}@${db_host}:5432/netcapacity"
+cat > .env <<EOF
+DATABASE_URL=$DATABASE_URL
+RABBITMQ_DEFAULT_USER=netcapacity
+RABBITMQ_DEFAULT_PASS=${db_password}
+AMQP_URL=amqp://netcapacity:${db_password}@rabbitmq:5672/%2F
+ALERT_THRESHOLD_PERCENT=${threshold}
+COLLECTION_MODE=simulated
+POLL_INTERVAL_SECONDS=20
+SIMULATED_DEVICES=40
+EOF
+chmod 600 .env
+
+# 4) Cria as tabelas no RDS (scripts idempotentes: CREATE ... IF NOT EXISTS)
+for sql in database/init.sql database/002_lag.sql; do
+  if [ -f "$sql" ]; then
+    docker run --rm -v "$APP_DIR/database:/sql:ro" postgres:16-alpine \
+      psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "/sql/$(basename "$sql")"
+  fi
+done
+
+# 5) Sobe os microserviços (restart: unless-stopped => voltam sozinhos
+#    quando o Learner Lab religar a EC2)
+docker compose -f deploy/docker-compose.aws.yml --env-file .env up -d --build
+docker compose -f deploy/docker-compose.aws.yml ps
