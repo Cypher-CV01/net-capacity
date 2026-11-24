@@ -9,11 +9,25 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
+      - uses: hashicorp/setup-terraform@v3
+      - name: Dependências Python
+        run: pip install -r services/requirements.txt
       - name: Python syntax
         run: python -m compileall -q services legacy
       - name: Unit tests
         run: python -m unittest discover -s tests -v
-      - name: Compose config
+      - name: Compose config (local)
         run: docker compose --env-file .env.example config -q
+      - name: Compose config (AWS app e ops)
+        run: |
+          printf 'DATABASE_URL=x\nSQS_QUEUE_URL=x\nAWS_REGION=us-east-1\nINSTANCE_ID=i\nLOKI_URL=http://x:3100\nGRAFANA_ADMIN_PASSWORD=x\nRDS_HOST=x\nRDS_USER=x\nRDS_PASSWORD=x\n' > /tmp/ci.env
+          docker compose -f deploy/docker-compose.app.yml --env-file /tmp/ci.env config -q
+          docker compose -f deploy/docker-compose.ops.yml --env-file /tmp/ci.env config -q
+      - name: Terraform fmt e validate
+        run: |
+          cd infra/terraform
+          terraform fmt -check -recursive
+          terraform init -backend=false -input=false
+          terraform validate
       - name: Build containers
         run: docker compose --env-file .env.example build

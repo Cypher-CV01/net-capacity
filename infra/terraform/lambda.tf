@@ -1,5 +1,5 @@
 # Função serverless: relatório "ação necessária" (interfaces >= limiar).
-# EventBridge dispara -> Lambda chama a API -> publica no SNS -> e-mail.
+# EventBridge dispara -> Lambda chama a API pelo ALB -> publica no SNS -> e-mail.
 
 data "aws_iam_role" "lab" {
   name = "LabRole" # role pronta do Learner Lab (não podemos criar roles)
@@ -33,7 +33,7 @@ resource "aws_lambda_function" "relatorio" {
 
   environment {
     variables = {
-      API_URL                 = "http://${aws_eip.app.public_ip}"
+      API_URL                 = "http://${aws_lb.app.dns_name}"
       SNS_TOPIC_ARN           = aws_sns_topic.alertas.arn
       ALERT_THRESHOLD_PERCENT = tostring(var.alert_threshold_percent)
     }

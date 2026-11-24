@@ -1,0 +1,35 @@
+# Promtail: lê os logs de todos os containers Docker da instância e envia ao Loki.
+# Variáveis expandidas pelo -config.expand-env=true: LOKI_URL, INSTANCE_ID, HOST_ROLE.
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: ${LOKI_URL}/loki/api/v1/push
+    external_labels:
+      host: ${INSTANCE_ID}
+      role: ${HOST_ROLE}
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        target_label: service
+      - source_labels: [__meta_docker_container_name]
+        regex: '/(.*)'
+        target_label: container
+    pipeline_stages:
+      # Os serviços Python escrevem logs em JSON: extrai nível e evento como labels
+      - json:
+          expressions:
+            level: level
+            event: event
+      - labels:
+          level:
+          event:

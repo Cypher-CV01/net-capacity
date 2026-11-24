@@ -1,0 +1,503 @@
+{
+  "uid": "netcapacity-capacidade",
+  "title": "NetCapacity — Capacidade dos uplinks",
+  "description": "Visão de negócio: utilização GPON x HFC, tendências e uplinks que exigem expansão (≥ 80%).",
+  "tags": [
+    "netcapacity"
+  ],
+  "timezone": "browser",
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Uplinks ≥ 80% agora",
+      "description": "Interfaces cuja última amostra está no limiar de expansão.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "rds"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "rds"
+          },
+          "rawSql": "SELECT COUNT(*) AS \"Uplinks\" FROM (SELECT DISTINCT ON (m.device_id, m.ifindex) m.device_id, m.ifindex, m.utilization_percent, m.observed_at FROM metrics m ORDER BY m.device_id, m.ifindex, m.observed_at DESC) x WHERE utilization_percent >= 80",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Equipamentos monitorados",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "rds"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "rds"
+          },
+          "rawSql": "SELECT COUNT(*) AS \"Equipamentos\" FROM devices",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Interfaces de uplink",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "rds"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "rds"
+          },
+          "rawSql": "SELECT COUNT(*) AS \"Interfaces\" FROM interfaces",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Utilização média agora",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "rds"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "rds"
+          },
+          "rawSql": "SELECT AVG(utilization_percent) AS \"Média\" FROM (SELECT DISTINCT ON (m.device_id, m.ifindex) m.device_id, m.ifindex, m.utilization_percent, m.observed_at FROM metrics m ORDER BY m.device_id, m.ifindex, m.observed_at DESC) x",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Utilização média: GPON x HFC",
+      "description": "Média da utilização (maior valor entre RX e TX) por tecnologia.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "rds"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 16,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "rds"
+          },
+          "rawSql": "SELECT $__timeGroupAlias(m.observed_at, '1m'), d.technology AS metric, AVG(m.utilization_percent) AS value FROM metrics m JOIN devices d ON d.id = m.device_id WHERE $__timeFilter(m.observed_at) GROUP BY 1, 2 ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "thresholdsStyle": {
+              "mode": "line+area"
+            }
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "barchart",
+      "title": "Tráfego agregado por tecnologia (Gbps, última amostra)",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "rds"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 5,
+        "w": 8,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "rds"
+          },
+          "rawSql": "SELECT d.technology AS \"Tecnologia\", SUM(x.tx)/1e9 AS \"TX\", SUM(x.rx)/1e9 AS \"RX\" FROM (SELECT DISTINCT ON (device_id, ifindex) device_id, tx_bps AS tx, rx_bps AS rx FROM metrics ORDER BY device_id, ifindex, observed_at DESC) x JOIN devices d ON d.id = x.device_id GROUP BY 1 ORDER BY 1",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Gbits"
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "showValue": "auto",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Interfaces mais carregadas (top 8 na janela)",
+      "description": "Tendência das interfaces que mais se aproximam do limiar.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "rds"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 16,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "rds"
+          },
+          "rawSql": "WITH top AS (SELECT device_id, ifindex FROM metrics WHERE $__timeFilter(observed_at) GROUP BY 1, 2 ORDER BY MAX(utilization_percent) DESC LIMIT 8) SELECT $__timeGroupAlias(m.observed_at, '1m'), m.device_id || ' ' || i.name AS metric, MAX(m.utilization_percent) AS value FROM metrics m JOIN top t USING (device_id, ifindex) JOIN interfaces i ON i.device_id = m.device_id AND i.ifindex = m.ifindex WHERE $__timeFilter(m.observed_at) GROUP BY 1, 2 ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "lineWidth": 2,
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "Ação necessária: uplinks ≥ 80% (última amostra)",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "rds"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 14,
+        "w": 8,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "rds"
+          },
+          "rawSql": "SELECT x.device_id AS \"Equipamento\", i.name AS \"Interface\", d.technology AS \"Tecnologia\", ROUND(x.utilization_percent::numeric, 1) AS \"Utilização %\" FROM (SELECT DISTINCT ON (m.device_id, m.ifindex) m.device_id, m.ifindex, m.utilization_percent, m.observed_at FROM metrics m ORDER BY m.device_id, m.ifindex, m.observed_at DESC) x JOIN interfaces i ON i.device_id = x.device_id AND i.ifindex = x.ifindex JOIN devices d ON d.id = x.device_id WHERE x.utilization_percent >= 80 ORDER BY 4 DESC",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Utilização %"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Alertas de expansão gerados por minuto",
+      "description": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "rds"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 24,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "rds"
+          },
+          "rawSql": "SELECT $__timeGroupAlias(a.observed_at, '1m'), d.technology AS metric, COUNT(*) AS value FROM alerts a JOIN devices d ON d.id = a.device_id WHERE $__timeFilter(a.observed_at) GROUP BY 1, 2 ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60
+          }
+        },
+        "overrides": []
+      }
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  }
+}

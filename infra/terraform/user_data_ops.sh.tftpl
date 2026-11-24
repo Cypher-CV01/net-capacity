@@ -1,0 +1,54 @@
+#!/bin/bash
+# Inicialização da instância de OPERAÇÃO: migração do banco, coletor e observabilidade.
+# Log: /var/log/netcapacity-bootstrap.log
+exec > >(tee -a /var/log/netcapacity-bootstrap.log) 2>&1
+set -euxo pipefail
+
+# 1) Docker + Compose plugin + Git
+dnf install -y docker git
+systemctl enable --now docker
+mkdir -p /usr/local/lib/docker/cli-plugins
+curl -fsSL "https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64" \
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+TOKEN=$(curl -fsX PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+INSTANCE_ID=$(curl -fs -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
+
+# 2) Código
+APP_DIR=/opt/netcapacity
+git clone --branch "${repo_branch}" --depth 1 "${repo_url}" "$APP_DIR"
+cd "$APP_DIR"
+
+# 3) Configuração (arquivo só na instância, nunca no Git)
+cat > .env <<EOF
+DATABASE_URL=${database_url}
+QUEUE_BACKEND=sqs
+SQS_QUEUE_URL=${sqs_queue_url}
+AWS_REGION=${region}
+INSTANCE_ID=$INSTANCE_ID
+LOKI_URL=http://loki:3100
+SIMULATED_DEVICES=${simulated_devices}
+POLL_INTERVAL_SECONDS=${poll_interval_seconds}
+GRAFANA_ADMIN_PASSWORD=${grafana_admin_password}
+RDS_HOST=${db_host}
+RDS_USER=${db_user}
+RDS_PASSWORD=${db_password}
+EOF
+chmod 600 .env
+
+# 4) Migrações do banco (idempotentes: CREATE ... IF NOT EXISTS), com novas tentativas
+for sql in init.sql 002_lag.sql; do
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    if docker run --rm -v "$APP_DIR/database:/sql:ro" postgres:16-alpine \
+         psql "${database_url}" -v ON_ERROR_STOP=1 -f "/sql/$sql"; then
+      break
+    fi
+    echo "Banco ainda indisponível (tentativa $attempt)"; sleep 15
+  done
+done
+
+# 5) Coletor + Prometheus + Loki + Grafana
+docker compose -f deploy/docker-compose.ops.yml --env-file .env up -d --build
+docker compose -f deploy/docker-compose.ops.yml ps
+echo "BOOTSTRAP OK $INSTANCE_ID"

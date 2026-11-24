@@ -1,0 +1,11 @@
+# Carrega os dashboards JSON da pasta observability/grafana/dashboards (dashboards como código).
+apiVersion: 1
+
+providers:
+  - name: netcapacity
+    folder: NetCapacity
+    type: file
+    disableDeletion: false
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

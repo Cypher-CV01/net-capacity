@@ -1,0 +1,81 @@
+# Prometheus na instância ops.
+# As instâncias da aplicação são descobertas automaticamente pela API da EC2
+# (tag Role=app): quando o Auto Scaling cria ou remove instâncias, o
+# monitoramento acompanha sozinho, sem editar este arquivo.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    project: netcapacity
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # ---------- Instância ops ----------
+  - job_name: collector
+    static_configs:
+      - targets: ["collector:9102"]
+        labels: {role: ops}
+
+  - job_name: ops-node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+        labels: {role: ops}
+
+  - job_name: loki
+    static_configs:
+      - targets: ["loki:3100"]
+
+  # ---------- Instâncias da aplicação (descoberta automática) ----------
+  - job_name: app-node
+    ec2_sd_configs:
+      - region: us-east-1
+        port: 9100
+        refresh_interval: 30s
+        filters:
+          - {name: "tag:Role", values: [app]}
+          - {name: "tag:Project", values: [netcapacity]}
+          - {name: instance-state-name, values: [running]}
+    relabel_configs: &app_labels
+      - source_labels: [__meta_ec2_instance_id]
+        target_label: instance
+      - source_labels: [__meta_ec2_availability_zone]
+        target_label: az
+      - target_label: role
+        replacement: app
+
+  - job_name: app-containers
+    ec2_sd_configs:
+      - region: us-east-1
+        port: 8080
+        refresh_interval: 30s
+        filters:
+          - {name: "tag:Role", values: [app]}
+          - {name: "tag:Project", values: [netcapacity]}
+          - {name: instance-state-name, values: [running]}
+    relabel_configs: *app_labels
+
+  - job_name: app-api
+    metrics_path: /metrics
+    ec2_sd_configs:
+      - region: us-east-1
+        port: 8000
+        refresh_interval: 30s
+        filters:
+          - {name: "tag:Role", values: [app]}
+          - {name: "tag:Project", values: [netcapacity]}
+          - {name: instance-state-name, values: [running]}
+    relabel_configs: *app_labels
+
+  - job_name: app-processor
+    ec2_sd_configs:
+      - region: us-east-1
+        port: 9101
+        refresh_interval: 30s
+        filters:
+          - {name: "tag:Role", values: [app]}
+          - {name: "tag:Project", values: [netcapacity]}
+          - {name: instance-state-name, values: [running]}
+    relabel_configs: *app_labels

@@ -1,14 +1,27 @@
+import os
+import socket
 from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+from prometheus_fastapi_instrumentator import Instrumentator
 from common import connect_db
 
-app=FastAPI(title='NetCapacity API',version='0.1.0')
+THRESHOLD=float(os.getenv('ALERT_THRESHOLD_PERCENT','80'))
+# Identifica qual instância respondeu (mostra o balanceamento do ALB na demo)
+SERVED_BY=os.getenv('INSTANCE_ID') or socket.gethostname()
+
+app=FastAPI(title='NetCapacity API',version='0.2.0')
+Instrumentator().instrument(app).expose(app)  # GET /metrics para o Prometheus
+
+@app.middleware('http')
+async def served_by_header(request, call_next):
+    response=await call_next(request)
+    response.headers['X-Served-By']=SERVED_BY
+    return response
 @app.get('/health')
 def health():
     try:
         with connect_db() as db:
             db.execute('SELECT 1')
-        return {'status':'ok'}
+        return {'status':'ok','served_by':SERVED_BY}
     except Exception as exc:
         raise HTTPException(status_code=503,detail='database unavailable') from exc
 
@@ -20,8 +33,8 @@ def summary():
         rows=db.execute("""SELECT d.technology, COUNT(*), ROUND(AVG(latest.utilization_percent)::numeric,1)
           FROM (SELECT DISTINCT ON (device_id,ifindex) device_id,ifindex,utilization_percent FROM metrics ORDER BY device_id,ifindex,observed_at DESC,id DESC) latest
           JOIN devices d ON d.id=latest.device_id GROUP BY d.technology ORDER BY d.technology""").fetchall()
-        high=db.execute("""SELECT COUNT(*) FROM (SELECT DISTINCT ON(device_id,ifindex) utilization_percent FROM metrics ORDER BY device_id,ifindex,observed_at DESC,id DESC) x WHERE utilization_percent >= 80""").fetchone()[0]
-    return {'devices':total,'interfaces':interfaces,'interfaces_over_80':high,'by_technology':[{'technology':r[0],'interfaces':r[1],'average_utilization':float(r[2])} for r in rows]}
+        high=db.execute("""SELECT COUNT(*) FROM (SELECT DISTINCT ON(device_id,ifindex) utilization_percent FROM metrics ORDER BY device_id,ifindex,observed_at DESC,id DESC) x WHERE utilization_percent >= %s""",(THRESHOLD,)).fetchone()[0]
+    return {'served_by':SERVED_BY,'threshold':THRESHOLD,'devices':total,'interfaces':interfaces,'interfaces_over_80':high,'by_technology':[{'technology':r[0],'interfaces':r[1],'average_utilization':float(r[2])} for r in rows]}
 
 @app.get('/api/interfaces')
 def interfaces():

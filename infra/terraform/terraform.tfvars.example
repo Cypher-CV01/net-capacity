@@ -1,8 +1,11 @@
 # Copie para terraform.tfvars (NÃO commitar) e preencha.
-my_ip_cidr  = "200.200.200.200/32"     # seu IP: https://checkip.amazonaws.com
-db_password = "TroqueEstaSenha123"     # só letras e números, 12+ caracteres
-alert_email = "seu.email@exemplo.com"
+my_ip_cidr             = "0.0.0.0/0"                 # demo: SSH e Grafana de qualquer IP
+db_password            = "TroqueEstaSenha123"        # só letras e números, 12+ caracteres
+grafana_admin_password = "TroqueEstaSenhaGrafana1"   # só letras e números, 12+ caracteres
+alert_email            = "seu.email@exemplo.com"
+repo_url               = "https://github.com/Cypher-CV01/net-capacity.git"
 
-# Deixe vazio até o repositório existir no GitHub (público):
-repo_url = ""
-# repo_url = "https://github.com/SEU_USUARIO/NetCapacity.git"
+# Opcionais (já têm valor padrão em variables.tf):
+# db_multi_az          = true   # failover do banco em outra AZ (mais caro e ~15 min a mais)
+# app_desired_capacity = 2
+# app_max_size         = 4

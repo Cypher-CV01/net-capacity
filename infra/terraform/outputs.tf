@@ -1,21 +1,39 @@
 output "app_url" {
-  description = "Interface web (frontend)"
-  value       = "http://${aws_eip.app.public_ip}"
+  description = "Aplicação (Application Load Balancer)"
+  value       = "http://${aws_lb.app.dns_name}"
 }
 
 output "health_url" {
-  description = "Health check da API (via Nginx)"
-  value       = "http://${aws_eip.app.public_ip}/health"
+  description = "Health check da aplicação via ALB"
+  value       = "http://${aws_lb.app.dns_name}/health"
 }
 
 output "grafana_url" {
-  description = "Grafana (Pessoa C sobe a stack de observabilidade)"
-  value       = "http://${aws_eip.app.public_ip}:3000"
+  description = "Grafana (usuário admin + grafana_admin_password)"
+  value       = "http://${aws_eip.ops.public_ip}:3000"
 }
 
-output "ssh_command" {
-  description = "Acesso SSH (labsuser.pem baixado em AWS Details)"
-  value       = "ssh -i labsuser.pem ec2-user@${aws_eip.app.public_ip}"
+output "ops_ip" {
+  description = "IP público da instância de operação"
+  value       = aws_eip.ops.public_ip
+}
+
+output "ssh_ops" {
+  description = "SSH na instância de operação"
+  value       = "ssh -i ~/.ssh/labsuser.pem ec2-user@${aws_eip.ops.public_ip}"
+}
+
+output "asg_name" {
+  description = "Auto Scaling Group da aplicação"
+  value       = aws_autoscaling_group.app.name
+}
+
+output "sqs_queue_url" {
+  value = aws_sqs_queue.samples.url
+}
+
+output "sqs_dlq_url" {
+  value = aws_sqs_queue.samples_dlq.url
 }
 
 output "rds_endpoint" {

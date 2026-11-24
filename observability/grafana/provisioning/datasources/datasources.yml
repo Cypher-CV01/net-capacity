@@ -1,0 +1,36 @@
+# Datasources criados automaticamente quando o Grafana sobe.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus            # métricas técnicas: instâncias, containers, API, fila
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+
+  - name: Loki                  # logs de todas as instâncias
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+
+  - name: NetCapacity-RDS       # métricas de negócio: utilização dos uplinks, alertas
+    uid: rds
+    type: grafana-postgresql-datasource
+    url: ${RDS_HOST}:5432
+    user: ${RDS_USER}
+    jsonData:
+      database: netcapacity
+      sslmode: require          # RDS PostgreSQL 16 exige SSL
+      postgresVersion: 1600
+      timescaledb: false
+    secureJsonData:
+      password: ${RDS_PASSWORD}
+
+  - name: CloudWatch            # serviços gerenciados: ALB, SQS, RDS, Lambda, Auto Scaling
+    uid: cloudwatch
+    type: cloudwatch
+    jsonData:
+      authType: default         # usa a role da instância (LabInstanceProfile)
+      defaultRegion: ${AWS_REGION}
